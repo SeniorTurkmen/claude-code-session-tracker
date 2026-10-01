@@ -1088,6 +1088,10 @@ kbd {
 
 /* ----------------------------------------------------------------- history */
 
+/* Everything past the first read is wrapped in one element so it can be hidden at
+   once, which puts it out of reach of `main`'s gap — so the wrapper repeats it. */
+#content:not([hidden]) { display: flex; flex-direction: column; gap: 1.25rem; }
+
 /* Cache reads sit beside billed tokens and outweigh them fifty to one, so they are
    printed quieter: present for whoever wants them, never the number the eye lands on. */
 .grid .soft { color: var(--ink-faint); }
