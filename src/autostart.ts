@@ -86,19 +86,49 @@ export function macLogPath(home: string = homedir()): string {
  *
  * Login Items lists a job by its executable's file name, which for the tracker
  * itself would be `cli.js`, or `node`. The script gives it a name worth reading
- * and then becomes the tracker. It runs the tracker's own executable when it can,
- * so Homebrew's `node` link is found through PATH and survives an upgrade.
+ * and then becomes the tracker.
+ *
+ * Port and process lists name a running program by its file, too, so node is run
+ * from a hard link named after the project, kept next to the script. The link is
+ * made again at every login, so it follows a Node upgrade, and plain node runs
+ * when it cannot be made (node on another volume).
+ *
+ * A copy in a folder macOS guards (Desktop, Documents, Downloads, iCloud Drive, or
+ * another volume) skips the link: access there is granted per program, and while
+ * `node` may have it, the link is a new program that is refused.
+ *
+ * Node is found through PATH when the tracker could run on its own, as its
+ * `#!/usr/bin/env node` would, so Homebrew's `node` link survives an upgrade.
  */
 export function launcherScriptPath(home: string = homedir()): string {
   return join(home, 'Library', 'Application Support', 'claude-code-session-tracker', ENTRY_NAME);
 }
 
-export function buildLauncherScript(launcher: Launcher, runnable = isExecutable(launcher.cli)): string {
-  const command = runnable ? shellQuote(launcher.cli) : `${shellQuote(launcher.node)} ${shellQuote(launcher.cli)}`;
-  return `#!/bin/sh
+export function buildLauncherScript(
+  launcher: Launcher,
+  runnable = isExecutable(launcher.cli),
+  linkable = !isInGuardedFolder(launcher.cli),
+): string {
+  const header = `#!/bin/sh
 # Written by \`claude-code-session-tracker autostart on\`; removed by \`autostart off\`.
-exec ${command}
 `;
+  const cli = shellQuote(launcher.cli);
+  if (!linkable) return `${header}exec ${runnable ? cli : `${shellQuote(launcher.node)} ${cli}`}\n`;
+
+  const node = runnable ? `$(command -v node) || node=${shellQuote(launcher.node)}` : shellQuote(launcher.node);
+  return `${header}node=${node}
+link="$(dirname "$0")/claude-code-session-tracker"
+ln -fL "$node" "$link" 2>/dev/null || rm -f "$link"
+[ -x "$link" ] && exec "$link" ${cli}
+exec "$node" ${cli}
+`;
+}
+
+/** Folders whose files macOS hands out per program, after asking the user. */
+export function isInGuardedFolder(path: string, home: string = homedir()): boolean {
+  const real = safeRealpath(path);
+  const guarded = ['Desktop', 'Documents', 'Downloads', join('Library', 'Mobile Documents')].map((folder) => join(home, folder) + sep);
+  return real.startsWith('/Volumes/') || guarded.some((folder) => real.startsWith(folder) || path.startsWith(folder));
 }
 
 /**
@@ -229,6 +259,8 @@ async function macOn(launcher: Launcher, io: Io): Promise<number> {
   mkdirSync(dirname(macLogPath()), { recursive: true });
   const script = launcherScriptPath();
   mkdirSync(dirname(script), { recursive: true });
+  // A link left by an earlier `on` would hold on to a copy of node that is never used.
+  rmSync(join(dirname(script), 'claude-code-session-tracker'), { force: true });
   writeFileSync(script, buildLauncherScript(launcher));
   chmodSync(script, 0o755);
   writeFileSync(plist, buildPlist(launcher));

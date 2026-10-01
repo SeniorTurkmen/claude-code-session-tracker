@@ -133,6 +133,9 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     );
   }
 
+  // Otherwise `ps`, Activity Monitor and Task Manager's details list it as `node`.
+  process.title = 'claude-code-session-tracker';
+
   const server = createServer({ config, registry });
   const boundPort = await listen(server, config);
   // The page reads its own limit from the query string, so `--limit` carries through.

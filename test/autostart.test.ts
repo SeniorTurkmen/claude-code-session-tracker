@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import {
   buildLauncherScript,
   buildPlist,
+  isInGuardedFolder,
   isOneOffCache,
   LABEL,
   launcherScriptPath,
@@ -60,22 +61,42 @@ describe('the macOS login item', () => {
     match(buildPlist(launcher, '/Users/a'), /<array>\n\t\t<string>\/Users\/a\/Library\/Application Support\/claude-code-session-tracker\/Claude Code Session Tracker<\/string>\n\t<\/array>/);
   });
 
-  it('has the script become the tracker itself when it can run on its own', () => {
+  it('finds node through PATH when the tracker can run on its own', () => {
     strictEqual(
-      buildLauncherScript(launcher, true).split('\n').at(-2),
-      "exec '/opt/homebrew/bin/claude-code-session-tracker'",
+      buildLauncherScript(launcher, true).split('\n')[2],
+      "node=$(command -v node) || node='/opt/homebrew/bin/node'",
     );
   });
 
-  it('falls back to node when the tracker cannot run on its own', () => {
-    strictEqual(
-      buildLauncherScript(launcher, false).split('\n').at(-2),
-      "exec '/opt/homebrew/bin/node' '/opt/homebrew/bin/claude-code-session-tracker'",
-    );
+  it('uses the given node when the tracker cannot run on its own', () => {
+    strictEqual(buildLauncherScript(launcher, false).split('\n')[2], "node='/opt/homebrew/bin/node'");
+  });
+
+  it('runs the tracker from a link to node named after it falling back to node', () => {
+    const lines = buildLauncherScript(launcher, true).split('\n');
+    strictEqual(lines.at(-3), `[ -x "$link" ] && exec "$link" '/opt/homebrew/bin/claude-code-session-tracker'`);
+    strictEqual(lines.at(-2), `exec "$node" '/opt/homebrew/bin/claude-code-session-tracker'`);
+    match(lines.join('\n'), /link="\$\(dirname "\$0"\)\/claude-code-session-tracker"/);
+  });
+
+  it('runs a copy in a guarded folder without the link', () => {
+    const desktop = { node: '/opt/homebrew/bin/node', cli: '/Users/a/Desktop/tracker/dist/cli.js' };
+    strictEqual(buildLauncherScript(desktop, true, false).split('\n').at(-2), "exec '/Users/a/Desktop/tracker/dist/cli.js'");
+    strictEqual(buildLauncherScript(desktop, false, false).split('\n').at(-2), "exec '/opt/homebrew/bin/node' '/Users/a/Desktop/tracker/dist/cli.js'");
+    strictEqual(buildLauncherScript(desktop, true, false).includes('link'), false);
+  });
+
+  it('knows the folders macOS guards', () => {
+    ok(isInGuardedFolder('/Users/a/Desktop/tracker/dist/cli.js', '/Users/a'));
+    ok(isInGuardedFolder('/Users/a/Documents/cli.js', '/Users/a'));
+    ok(isInGuardedFolder('/Users/a/Library/Mobile Documents/com~apple~CloudDocs/cli.js', '/Users/a'));
+    ok(isInGuardedFolder('/Volumes/Work/cli.js', '/Users/a'));
+    strictEqual(isInGuardedFolder('/opt/homebrew/bin/claude-code-session-tracker', '/Users/a'), false);
+    strictEqual(isInGuardedFolder('/Users/a/.npm-global/bin/claude-code-session-tracker', '/Users/a'), false);
   });
 
   it('quotes paths for the shell', () => {
-    match(buildLauncherScript({ node: '/n', cli: "/it's here/cli.js" }, true), /exec '\/it'\\''s here\/cli\.js'/);
+    match(buildLauncherScript({ node: '/n', cli: "/it's here/cli.js" }, true), /exec "\$node" '\/it'\\''s here\/cli\.js'/);
   });
 
   it('never passes --no-open, so logging in opens the page', () => {
