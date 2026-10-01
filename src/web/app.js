@@ -525,6 +525,7 @@ function renderLimitCard(card, limit, key) {
   setField(card, 'reset', resetLine(limit, current));
 
   renderBar(card, share);
+  renderElapsedMark(card, limit, current, share);
   renderForecastMark(card, limit, forecast);
   setField(card, 'used', formatCompactCount(billedTokens(current?.tokens)));
   renderForecast(card, limit, forecast);
@@ -607,12 +608,6 @@ function renderForecastMark(card, limit, forecast) {
 
   const runsOut = forecast.hitAt !== undefined;
   const share = runsOut ? 1 : Math.min(1, forecast.atReset);
-  mark.style.left = `${share * 100}%`;
-  mark.setAttribute('data-usage', runsOut ? 'bad' : limitLevel(forecast.atReset));
-  // Near an end, the label opens inwards rather than spilling off the card.
-  if (share < 0.3) mark.setAttribute('data-align', 'start');
-  else if (share > 0.7) mark.setAttribute('data-align', 'end');
-  else mark.removeAttribute('data-align');
 
   const headline = runsOut
     ? `${limit.reported ? 'Hits the limit' : 'Passes your heaviest'} ${formatForecastAt(limit, forecast.hitAt)}`
@@ -620,7 +615,51 @@ function renderForecastMark(card, limit, forecast) {
   const pace = limit.windowMs > DAY_MS ? 'the last day' : 'the last hour';
   const detail = `Where this ${limit.windowMs > DAY_MS ? 'week' : 'window'} lands if you keep working at the pace of ${pace}.`;
 
-  const label = field(card, 'forecast-label');
+  placeTick(mark, field(card, 'forecast-label'), share, headline, detail);
+}
+
+/**
+ * The clock as a tick on the bar: how much of the window's time has gone.
+ *
+ * The fill says how much of the limit is spent; this says how much of the time is.
+ * A fill running ahead of the tick is a window being spent faster than it refills,
+ * which is legible at a glance without reading a single figure.
+ *
+ * Nothing for a rolling week — it ends at the instant it is measured, so its tick
+ * would sit pinned at the end and say nothing.
+ */
+function renderElapsedMark(card, limit, current, share, now = Date.now()) {
+  const mark = field(card, 'elapsed');
+  if (!mark) return;
+  const total = current ? current.resetsAt - current.startedAt : 0;
+  mark.hidden = !current || limit.clock === 'rolling' || total <= 0;
+  if (mark.hidden) return;
+
+  const elapsed = Math.min(1, Math.max(0, (now - current.startedAt) / total));
+  const week = limit.windowMs > DAY_MS;
+  // The tick is now, so the hour alone places it — the day is today.
+  const headline = `${formatShare(elapsed)} of the ${week ? 'week' : 'window'} gone · ${formatClock(now)}`;
+
+  let detail = `${formatClockSpan(current.resetsAt - now)} until it resets.`;
+  if (share !== undefined) {
+    const verdict = share > elapsed ? 'faster than the clock' : 'slower than the clock';
+    detail = `${formatShare(share)} of the limit used — ${verdict}. ${detail}`;
+  }
+
+  placeTick(mark, field(card, 'elapsed-label'), elapsed, headline, detail);
+}
+
+/**
+ * Put a tick at `share` of the bar and give it its hover label.
+ *
+ * Near an end, the label opens inwards rather than spilling off the card.
+ */
+function placeTick(mark, label, share, headline, detail) {
+  mark.style.left = `${share * 100}%`;
+  if (share < 0.3) mark.setAttribute('data-align', 'start');
+  else if (share > 0.7) mark.setAttribute('data-align', 'end');
+  else mark.removeAttribute('data-align');
+
   if (label) {
     const strong = document.createElement('strong');
     strong.textContent = headline;

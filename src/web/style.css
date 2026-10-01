@@ -19,6 +19,9 @@
   --hot: #c4691f;
   --bad: #c1442e;
   --zebra: #f5f3ec;
+  /* The two ticks on a limit bar: your pace, and the clock. */
+  --tick-pace: #2f6fd6;
+  --tick-clock: #d1352b;
 }
 
 :root[data-theme="dark"] {
@@ -35,6 +38,8 @@
   --hot: #e08a45;
   --bad: #d9614a;
   --zebra: #1a1917;
+  --tick-pace: #6ea0f2;
+  --tick-clock: #ec5f55;
 }
 
 * { box-sizing: border-box; }
@@ -585,10 +590,11 @@ body.drawer-open { overflow: hidden; }
   transition: width .4s ease;
 }
 
-/* Where the window stands at its reset at the current pace. Taller than the bar so it
-   reads as a mark on it rather than a seam in the fill, and coloured on the bar's
-   scale through `[data-usage]`, which sets `color`. */
-.limits-bar-forecast {
+/* A mark on the bar, taller than it so it reads as a mark rather than a seam in the
+   fill. Two of them, each in its own colour so they never read as one: where the
+   window lands at its reset at your current pace, in blue, and how much of the
+   window's time has gone, in red. */
+.limits-bar-tick {
   position: absolute;
   top: -.25rem;
   bottom: -.25rem;
@@ -603,21 +609,21 @@ body.drawer-open { overflow: hidden; }
 
 /* Two pixels is too narrow to find with a pointer, so the tick carries a wider,
    invisible hit area around it. */
-.limits-bar-forecast::before {
+.limits-bar-tick::before {
   content: "";
   position: absolute;
   inset: -.3rem -.45rem;
 }
 
 /* On hover the tick stands taller and thicker, and says what it is. */
-.limits-bar-forecast:hover,
-.limits-bar-forecast:focus-visible {
+.limits-bar-tick:hover,
+.limits-bar-tick:focus-visible {
   width: 3px;
   top: -.45rem;
   bottom: -.45rem;
 }
 
-.limits-bar-forecast-label {
+.limits-bar-tick-label {
   position: absolute;
   bottom: calc(100% + .45rem);
   left: 50%;
@@ -639,23 +645,26 @@ body.drawer-open { overflow: hidden; }
   transform: translate(-50%, .3rem);
   transition: opacity .18s ease, transform .18s ease;
 }
-/* Near either end of the bar the label opens inwards, so it never leaves the card. */
-.limits-bar-forecast[data-align="start"] .limits-bar-forecast-label { left: -.4rem; transform: translate(0, .3rem); }
-.limits-bar-forecast[data-align="end"] .limits-bar-forecast-label { left: auto; right: -.4rem; transform: translate(0, .3rem); }
+.limits-bar-tick[data-role="forecast"] { color: var(--tick-pace); }
+.limits-bar-tick[data-role="elapsed"] { color: var(--tick-clock); }
 
-.limits-bar-forecast:hover .limits-bar-forecast-label,
-.limits-bar-forecast:focus-visible .limits-bar-forecast-label {
+/* Near either end of the bar the label opens inwards, so it never leaves the card. */
+.limits-bar-tick[data-align="start"] .limits-bar-tick-label { left: -.4rem; transform: translate(0, .3rem); }
+.limits-bar-tick[data-align="end"] .limits-bar-tick-label { left: auto; right: -.4rem; transform: translate(0, .3rem); }
+
+.limits-bar-tick:hover .limits-bar-tick-label,
+.limits-bar-tick:focus-visible .limits-bar-tick-label {
   opacity: 1;
   transform: translate(-50%, 0);
 }
-.limits-bar-forecast[data-align]:hover .limits-bar-forecast-label,
-.limits-bar-forecast[data-align]:focus-visible .limits-bar-forecast-label { transform: translate(0, 0); }
+.limits-bar-tick[data-align]:hover .limits-bar-tick-label,
+.limits-bar-tick[data-align]:focus-visible .limits-bar-tick-label { transform: translate(0, 0); }
 
-.limits-bar-forecast-label strong { display: block; color: var(--ink); font-weight: 600; }
+.limits-bar-tick-label strong { display: block; color: var(--ink); font-weight: 600; }
 
 @media (prefers-reduced-motion: reduce) {
-  .limits-bar-forecast,
-  .limits-bar-forecast-label { transition: none; }
+  .limits-bar-tick,
+  .limits-bar-tick-label { transition: none; }
 }
 .limits-bar-fill[data-usage="ok"] { background: var(--ok); }
 .limits-bar-fill[data-usage="warn"] { background: var(--warn); }
