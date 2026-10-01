@@ -114,6 +114,16 @@ h1 { margin: .15rem 0 0; font-size: 1.6rem; letter-spacing: -.01em; font-weight:
   .live-badge[data-state="ok"] .live-dot { animation: none; }
 }
 
+/* When the page last heard back. */
+.refreshed {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .64rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
 main { display: flex; flex-direction: column; gap: 1.25rem; flex: 1; }
 
 .toolbar { display: flex; flex-wrap: wrap; align-items: baseline; gap: .6rem 1rem; }

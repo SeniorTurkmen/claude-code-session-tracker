@@ -269,6 +269,7 @@ async function fetchSessions() {
 
   state.failures = 0;
   hideBanner();
+  renderRefreshed(Date.now());
 
   const sessions = result.sessions ?? [];
   // The server never truncates running sessions, so this split is also the split
@@ -281,6 +282,14 @@ async function fetchSessions() {
   render();
   // A session that ended while the panel was open should stop claiming it is busy.
   if (state.openId) syncPanelStatus();
+}
+
+/** Clock time to the second: the list re-reads every two, so minutes would sit still. */
+function renderRefreshed(at) {
+  const node = byId('refreshed');
+  if (!node) return;
+  node.textContent = `Updated ${new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`;
+  node.title = new Date(at).toLocaleString();
 }
 
 function showBanner(error) {
