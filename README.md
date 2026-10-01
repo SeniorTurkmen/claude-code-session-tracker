@@ -34,12 +34,16 @@ else — and puts it on one page.
 
 - **Your limits**, at the top: two cards, one for the five-hour window Claude
   Code calls a session limit and one for the seven-day window it calls a weekly
-  limit — how full each one is, when it resets, and where it lands if you keep
-  going at the rate you have kept. The percentage is Claude Code's own, read from
-  the usage readout it caches on this machine, so the two never quote you different
-  numbers for the same window.
-- **A notification** when either window is projected to land past its limit — so
-  the window that gets away from you is not the one you were too busy to check. A switch each on the settings page, both off
+  limit — how full each one is, when it resets, and when it runs out if you keep
+  working at the pace of the last hour (or, for the week, the last day). The
+  percentage is the one `/usage` shows, asked of Anthropic's server with Claude
+  Code's own sign-in, so the two never quote you different numbers for the same
+  window. Each bar carries two ticks — how much of the window's *time* has gone, and
+  where the fill lands by the reset — and is coloured by pace: a fill running ahead
+  of the clock tick is red, because at that rate the limit runs out first.
+- **A notification** when either window is on course to run out before it resets —
+  so the window that gets away from you is not the one you were too busy to check.
+  A switch each on the settings page, both off
   until you turn one on, each with its own interval for how often it may interrupt
   you: an hour for the five-hour window, four hours for the week. Offered once on a
   first run, and once more a fortnight later if you waved it away.
@@ -59,6 +63,8 @@ else — and puts it on one page.
 - **What the static context went on** — which `CLAUDE.md`, the skill listing, the
   agent listing, the MCP instructions — so the standing cost of every turn is
   itemised rather than a single number you cannot act on.
+- **Start at login** on macOS and Windows with `autostart on` — see
+  [Start it at login](#start-it-at-login).
 - **`--json`** for scripting, and an HTTP API if you would rather build your own.
 - **No dependencies, no install scripts, no writes** to your Claude directory. The
   one network call is Claude Code's own usage endpoint at `api.anthropic.com`, asked
@@ -129,6 +135,12 @@ from one of those, `on` says so and changes nothing.
 
 ## Options
 
+| Command | Description |
+| --- | --- |
+| `autostart on` | Start at login and open the page, and start it now (macOS and Windows) |
+| `autostart off` | Stop starting at login, and stop the copy it started |
+| `autostart status` | Say whether it starts at login |
+
 | Flag | Description |
 | --- | --- |
 | `-p, --port <number>` | Port to listen on, stepping forward up to 20 times if taken (default `3099`) |
@@ -189,7 +201,7 @@ can do with `curl`:
 | `GET /api/sessions?since=&until=` | The same list, narrowed to transcripts last written in that window. Epoch milliseconds; `since` is inclusive, `until` exclusive; either may be left off. Running sessions ignore it |
 | `GET /api/sessions?sort=` | `recent` (the default), `tokens-desc`, or `tokens-asc`. Ranks the finished sessions across the whole window, not just the page. An unknown value falls back to `recent` |
 | `GET /api/sessions/:id` | One session with `counts`, `tokens`, `models`, `activeMs`, `awaySummary`, and `notes` |
-| `GET /api/limits` | Both limits, as `session` (five hours) and `weekly` (seven days). Each carries `windowMs`, `clock`, `historyDays`, the `current` window, Claude Code's own percentage as `reported` when it has one for the window in progress, the heaviest closed window as `reference`, and `lastLimited` if Claude ever cut one short. 404 when no source can measure them |
+| `GET /api/limits` | Both limits, as `session` (five hours) and `weekly` (seven days). Each carries `windowMs`, `clock`, `historyDays`, the `current` window, the `recent` stretch the forecast is drawn from, the server's percentage as `reported` when there is one for the window in progress (its `source` says whether this tool fetched it — `server` — or read Claude Code's cached one — `claude-code`), the heaviest closed window as `reference`, and `lastLimited` if Claude ever cut one short. 404 when no source can measure them |
 | `GET /api/usage/history?since=&until=&project=` | Where the tokens went: a sparse half-hour series, every project in the range with its name and directory, and every model, each ranked by billed tokens. Epoch milliseconds again; `since` defaults to 30 days back, `until` to now, and a span wider than 90 days is narrowed — `range` in the reply is always the one actually read. `project` takes a slug from the same reply and narrows the series and the models to it, never the project list. 404 when no source can measure it |
 | `GET /api/health` | `ok`, the version, the Node it runs on, the resolved Claude directory, and per-source status |
 | `POST /api/sessions/:id/reveal` | Shows that transcript in your file manager. Requires a loopback `Origin` |
@@ -203,8 +215,9 @@ and the path it opens comes from our own lookup — never from the request.
 Claude Code bills against two clocks: a five-hour window it calls a session
 limit, and a seven-day one it calls a weekly limit. Neither quota is written to
 disk — both are enforced server-side and the only trace either leaves in a
-transcript is the turn it refused — so both cards at the top of the page are
-**measured, not read**:
+transcript is the turn it refused. So the share of each limit is asked of the
+server, the same way `/usage` asks it, and everything else on the cards — the
+windows, the tokens, the pace — is **measured from the transcripts**:
 
 - **The five-hour window** is chained from the turn timestamps. It opens on your
   first billed turn after the last one emptied and runs five hours from there,
@@ -222,23 +235,40 @@ transcript is the turn it refused — so both cards at the top of the page are
   are shown apart: they cost a fraction as much and outweigh the rest roughly
   fifty to one, so folding them in would produce a number that tracks how long
   your conversations are rather than how much work you asked for.
-- **Projected** is where the window in progress lands by its reset if it carries
-  on at the rate it has kept so far. It is tinted on the bar's own scale, so a
-  green bar beside a red projection is the card saying this window is calm now
-  and will not stay that way — the one reading on it that looks forwards. It
-  stays away until a fifth of the window has gone, since a rate read off the
-  first few minutes projects noise, and stays away from a rolling week entirely:
-  that one ends at the instant it is measured, leaving nothing to project into.
-- **The share** — the bar, and the percentage printed at the end of it — is Claude
-  Code's own reading of that limit. Claude Code caches what the server tells it in
-  `~/.claude.json`, and that is the only figure on the machine that is a share of the
-  ceiling actually enforced, so this is the same number `/usage` shows you. It is
-  exactly as fresh as Claude Code's last request for it — which is not the same as
-  the last thing you ran, since the readout is only refreshed when something actually
-  asks the server — so the note under the bar says how long ago that was.
+- **At this pace** is the forecast: if you keep working the way you are working
+  now, when this window runs out — or, if it will not, where it stands when it
+  resets. The rate is the recent stretch's — the last hour of the five-hour window,
+  the last day of the week — not the window's average, since a burst of agents two
+  hours into a quiet window barely moves the average and is exactly what the
+  forecast is for. It waits until that stretch covers a twentieth of the window (a
+  quarter of an hour, or eight hours of the week), since one heavy turn two minutes
+  in projects sixty times itself, and it stays away from a rolling week entirely:
+  that one ends at the instant it is measured, leaving nothing to forecast into.
+- **Two ticks on the bar.** The thin one is the clock — how much of the window's
+  time has gone — and the other is the forecast, where the fill reaches by the
+  reset, pinned at the end when the window runs out first. Hover or focus either for
+  the figures behind it.
+- **The colour** is read against the clock tick, not against the limit alone: half
+  the limit spent a tenth of the way into the window is trouble, and nine tenths
+  spent with an hour of five to go is not. A fill past the tick is red, closing on
+  it amber, well behind it green. A rolling week has no clock tick, so its bar falls
+  back to the limit's own scale.
+- **The share** — the bar, and the percentage printed at the end of it — is
+  Anthropic's reading of that limit, from the endpoint Claude Code's own `/usage`
+  reads, so it is the same number `/usage` shows you. It is asked with the token
+  Claude Code is already signed in with — from the macOS Keychain, or
+  `~/.claude/.credentials.json` elsewhere — read and never written: an expired token
+  is skipped rather than refreshed, because refreshing it here would sign Claude Code
+  out. It is asked at most every five minutes, a failed request keeps the last good
+  answer, and the note under the bar says whose reading it is and how long ago it
+  was taken.
 
-  Where there is no such reading — a machine whose account file has none, a window
-  whose reading has already reset, or a reading left more than a fifth of its window
+  With `--offline`, or when the server cannot be asked, the bar uses the readout
+  Claude Code caches in `~/.claude.json` instead — the same figure, but only as fresh
+  as Claude Code's own last request for it.
+
+  Where there is neither — a machine whose account file has none, a window whose
+  reading has already reset, or a reading left more than a fifth of its window
   behind the work, which is an hour for the five-hour card and a day and a half for
   the weekly one — the bar falls back to a yardstick: the heaviest window that has
   already closed, the last 7 days for the five-hour card and the last 28 for the
@@ -251,9 +281,11 @@ showing an empty bar.
 
 ### Getting told
 
-A desktop notification when a window's projection crosses the top of the bar it is
-drawn against — the real ceiling where Claude Code has reported one, and the heaviest
-window that has already closed where it has not. The card says the same thing in
+A desktop notification when a window's forecast reaches the top of the bar before
+the window resets — the real limit where there is a reading of it, and the heaviest
+window that has already closed where there is not. It says when, and how long before
+the reset that is: *At the last hour's pace you'll hit the limit at 15:40, 1h 20m
+before it resets.* The card says the same thing in
 colour; this is the same fact addressed to whoever is not looking at the card, which
 is the usual case for a tab parked behind an editor.
 
@@ -287,9 +319,8 @@ What they will and will not send:
 - **Again once the interval is up**, if the window is still headed past. The news
   by then is that it did not settle.
 - **Nothing for a rolling week.** A week with no reported reset ends at the
-  instant it is measured, so there is no remainder to project into and no
-  projection to cross anything — the same silence the card's `Projected` cell
-  keeps.
+  instant it is measured, so there is no remainder to forecast into — the same
+  silence the card's `At this pace` cell keeps.
 - **Only while a dashboard tab is open.** Nothing runs in the background: this
   is the page noticing, not a service. The tab can be buried, but it has to be
   there.
@@ -349,7 +380,9 @@ Click any row for the full read. Everything has a key:
 | <kbd>↵</kbd> | Open the selected session |
 | <kbd>Esc</kbd> | Close the panel, or clear the filter |
 
-The list refreshes every 2 seconds and says so when the server goes away. The
+The list refreshes every 2 seconds — the masthead shows the time of the last
+read, to the second — and says so when the server goes away. The detail panel
+slides in beside the list and back out when you close it. The
 page takes the same limit from the query string, so `?limit=200` and
 `--limit 200` show the same depth of history.
 
@@ -377,6 +410,7 @@ Everything comes from what Claude Code already writes to disk:
 | `~/.claude/projects/**/*.jsonl` | Session history — titles, prompts, models, branch |
 | `~/.claude/projects/*/*/subagents/agent-*.jsonl` | Subagent turns, for the limit windows they bill to |
 | `~/.claude.json` | The usage readout Claude Code caches — how full each limit is, and when it resets |
+| Keychain item `Claude Code-credentials` (macOS), or `~/.claude/.credentials.json` | The token Claude Code is signed in with, to ask the server for the same readout. Read, never refreshed or written. Not read with `--offline` |
 
 Set `CLAUDE_CONFIG_DIR` (or pass `--claude-dir`) if your Claude data lives
 somewhere other than `~/.claude`. Some Claude Code versions accept a
@@ -385,8 +419,11 @@ comma-separated list there; the first entry wins.
 ## Privacy
 
 **The tool never writes to the Claude directory**, binds to loopback only,
-rejects requests that are not addressed to a loopback host, and makes no
-outbound network calls of any kind. There is no telemetry and no update check.
+and rejects requests that are not addressed to a loopback host. Its one outbound
+call is the usage endpoint Claude Code's own `/usage` reads, at
+`api.anthropic.com`, sent only Claude Code's own token and at most every five
+minutes; `--offline` turns it off and the tool then makes no network calls at all.
+There is no telemetry and no update check.
 
 Transcripts hold your prompts, your paths, and sometimes your secrets. That is why
 the default bind is `127.0.0.1` and why every request has to be addressed to a
@@ -539,7 +576,9 @@ that without opening anything. The files that survive are then reduced to half-h
 buckets and memoised per file version — the part that does not change — so only the
 handful still being appended to are ever re-read. Both clocks are counted off that
 one sweep: 901 files and 1 GB on the development machine come to ~1.3 s cold and ~7 ms
-warm. The page asks every 15 seconds and ticks the countdown itself in between.
+warm. The page asks every 15 seconds and ticks the countdown itself in between; the
+server's percentage behind it is asked at most every five minutes, one request at a
+time, with a five-second timeout.
 
 Malformed lines are counted and skipped, never thrown on: the `.jsonl` format is
 private and undocumented, and it will change under us. When it does, the detail

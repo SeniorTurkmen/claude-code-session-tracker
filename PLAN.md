@@ -709,9 +709,10 @@ else.
 **Where the line is.** There is no quota on this machine to cross — the real
 ceiling is enforced server-side and never written to disk — so the only honest
 threshold is the one the bar is already drawn against: the heaviest window that has
-already closed. A projection reaching it is `PROJECTION_ALERT = 1` in `app.js`,
-beside `limitPace`, because it is a judgement about a limit and every other one
-lives there.
+already closed. (Since §9 the line is the real limit wherever the server reports one,
+and the event is the forecast's `hitAt` — the window running out before it resets —
+decided in `reportProjection` in `app.js`, beside `limitForecast`, because it is a
+judgement about a limit and every other one lives there.)
 
 **How often.** `renderLimits` runs once a second, and every one of those seconds a
 window over its yardstick is still over it. What decides whether any of them becomes
@@ -761,7 +762,7 @@ on while nothing can be sent.
 
 **What it deliberately does not do:**
 
-- **No rolling week.** That one ends at the instant it is measured, so `limitPace`
+- **No rolling week.** That one ends at the instant it is measured, so `limitForecast`
   returns nothing for it and there is nothing to cross. The card is already silent
   there for the same reason.
 - **No background service.** This is the page noticing, not a daemon. Documented
@@ -784,3 +785,32 @@ Shortening the interval past what has already elapsed lets the next tick through
 reload does not buy a second one. With the week over its yardstick and its switch
 off, only the five-hour window sent — and flipping the week on reached the reader on
 the next tick, without a reload. A refusal snaps both switches back and says why.
+
+---
+
+## 9. Since 0.6 — limits read from the server, a forecast, and starting at login  ✅ **DONE**
+
+- **Live limit readings.** `src/sources/claude-code/server-usage.ts` asks
+  `api.anthropic.com/api/oauth/usage` — the endpoint `/usage` reads — with the token
+  Claude Code is signed in with (Keychain on macOS, `.credentials.json` elsewhere). At
+  most every five minutes, one request at a time, a 5 s timeout, and a failed request
+  keeps the last good answer. An expired token is skipped, never refreshed: refreshing
+  it here would rotate the refresh token out from under Claude Code. `--offline` drops
+  it, and the cards fall back to the readout in `~/.claude.json`, then the yardstick.
+  This is the first network call the tool makes, so the README's Privacy section says
+  so plainly.
+- **At this pace.** The forecast uses the recent stretch (`UsageLimit.recent`: the last
+  hour of the five, the last day of the week), not the window's average, and waits
+  until that stretch is a twentieth of the window. It names when the window runs out,
+  or where it stands at the reset. The notifications in §8 now fire on that same
+  `hitAt` — so the card, the note and the notification all describe one event.
+- **Two ticks and a pace colour on each bar.** A clock tick (share of the window's time
+  gone) and a forecast tick. The bar is coloured by how far the fill stands from the
+  clock tick, not by the share alone; a rolling week has no clock tick and keeps the
+  limit's own scale.
+- **Page polish.** The time of the last refresh in the masthead; the detail panel slides
+  in and out.
+- **`autostart on|off|status`** (`src/autostart.ts`). A LaunchAgent on macOS, a per-user
+  Run key on Windows; no admin rights, and `off` removes exactly what `on` wrote. It
+  refuses to run from an `npx`/`dlx`/`bunx` cache, which may be cleared before the next
+  login.
