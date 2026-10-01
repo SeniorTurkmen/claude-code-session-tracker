@@ -10,7 +10,7 @@ project, with live status, titles, and token usage.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/dashboard-dark.png" />
-  <img alt="The dashboard: an Active table with a busy, a waiting and an idle session, above a Recent table spanning six projects with models, last-active times and token totals" src="docs/dashboard-light.png" />
+  <img alt="The dashboard: session and weekly limit cards with the share used and a forecast at this pace, above an Active table with a busy, a waiting and an idle session, and a Recent table with models, last-active times and token totals" src="docs/dashboard-light.png" />
 </picture>
 
 ```sh
@@ -75,7 +75,7 @@ Click a row and the panel opens beside it:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/session-detail-dark.png" />
-  <img alt="The detail panel for a running session: status and summary, token totals, how full the context window is, tokens per prompt, and the session's model, start and working time" src="docs/session-detail-light.png" />
+  <img alt="The detail panel for a running session: status and summary, token totals, how full the context window is, what the static context is made of, and what the session cost" src="docs/session-detail-light.png" />
 </picture>
 
 ## Requirements
