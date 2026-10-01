@@ -520,12 +520,13 @@ function renderLimitCard(card, limit, key) {
   // the card, and the alarm for whoever is not. Readings of the same clock taken a
   // line apart would be chances for them to disagree.
   const forecast = limitForecast(limit, current, share);
+  const elapsed = elapsedShare(limit, current);
 
   setField(card, 'window', current ? windowRange(limit, current) : '');
   setField(card, 'reset', resetLine(limit, current));
 
-  renderBar(card, share);
-  renderElapsedMark(card, limit, current, share);
+  renderBar(card, share, elapsed);
+  renderElapsedMark(card, limit, current, share, elapsed);
   renderForecastMark(card, limit, forecast);
   setField(card, 'used', formatCompactCount(billedTokens(current?.tokens)));
   renderForecast(card, limit, forecast);
@@ -539,20 +540,24 @@ function renderLimitCard(card, limit, key) {
  *
  * The figure sits on the bar's own line because it is the bar's own reading — it
  * adds no claim the card was not already making, and only spares the reader
- * measuring a width by eye. Both take the colour of the step they land on, so the
- * two cannot disagree.
+ * measuring a width by eye. Both take the same colour, so the two cannot disagree.
+ *
+ * The colour is read against the clock tick, not against the limit alone: half the
+ * limit spent with a tenth of the window gone is trouble, and nine tenths spent with
+ * an hour to go of a five-hour window is not. A fill past the tick is red — at that
+ * pace the limit runs out before the reset.
  *
  * Where they do part company is past the end: the bar has nowhere further to go and
  * reads full, while the figure keeps counting, since a limit overrun by half again —
  * on extra usage, or a record broken — is worth saying, and a bar pinned at its end
  * can only say `at least`.
  */
-function renderBar(card, share) {
+function renderBar(card, share, elapsed) {
   const bar = field(card, 'bar');
   if (bar) bar.hidden = share === undefined;
   if (share === undefined) return;
 
-  const level = limitLevel(share);
+  const level = paceLevel(share, elapsed);
 
   const fill = field(card, 'fill');
   if (fill) {
@@ -628,14 +633,12 @@ function renderForecastMark(card, limit, forecast) {
  * Nothing for a rolling week — it ends at the instant it is measured, so its tick
  * would sit pinned at the end and say nothing.
  */
-function renderElapsedMark(card, limit, current, share, now = Date.now()) {
+function renderElapsedMark(card, limit, current, share, elapsed, now = Date.now()) {
   const mark = field(card, 'elapsed');
   if (!mark) return;
-  const total = current ? current.resetsAt - current.startedAt : 0;
-  mark.hidden = !current || limit.clock === 'rolling' || total <= 0;
+  mark.hidden = elapsed === undefined;
   if (mark.hidden) return;
 
-  const elapsed = Math.min(1, Math.max(0, (now - current.startedAt) / total));
   const week = limit.windowMs > DAY_MS;
   // The tick is now, so the hour alone places it — the day is today.
   const headline = `${formatShare(elapsed)} of the ${week ? 'week' : 'window'} gone · ${formatClock(now)}`;
@@ -647,6 +650,17 @@ function renderElapsedMark(card, limit, current, share, now = Date.now()) {
   }
 
   placeTick(mark, field(card, 'elapsed-label'), elapsed, headline, detail);
+}
+
+/**
+ * How much of the window's time has gone, from 0 to 1 — where the clock tick sits.
+ *
+ * Nothing for a rolling week, or a window with no edges to measure between.
+ */
+function elapsedShare(limit, current, now = Date.now()) {
+  const total = current ? current.resetsAt - current.startedAt : 0;
+  if (!current || limit.clock === 'rolling' || total <= 0) return undefined;
+  return Math.min(1, Math.max(0, (now - current.startedAt) / total));
 }
 
 /**
@@ -866,6 +880,23 @@ function limitCeiling(limit, current) {
  */
 function billedTokens(tokens) {
   return tokens ? tokens.input + tokens.output + tokens.cacheCreate : 0;
+}
+
+/**
+ * The bar's colour: how far the fill stands from the clock tick.
+ *
+ * Past the tick is `bad` — spent faster than the window refills, so the limit runs
+ * out before the reset. Closing on it is `hot`, then `warn`; well behind it is `ok`.
+ * A spent limit is `bad` whatever the clock says. Without a tick — a rolling week —
+ * there is no clock to compare with, and the limit's own scale stands in.
+ */
+function paceLevel(share, elapsed) {
+  if (share >= 1) return 'bad';
+  if (elapsed === undefined) return limitLevel(share);
+  if (share > elapsed) return 'bad';
+  if (share >= elapsed * 0.9) return 'hot';
+  if (share >= elapsed * 0.75) return 'warn';
+  return 'ok';
 }
 
 /**
