@@ -525,6 +525,7 @@ function renderLimitCard(card, limit, key) {
   setField(card, 'reset', resetLine(limit, current));
 
   renderBar(card, share);
+  renderForecastMark(card, limit, forecast);
   setField(card, 'used', formatCompactCount(billedTokens(current?.tokens)));
   renderForecast(card, limit, forecast);
   reportProjection(key, limit, current, forecast);
@@ -590,6 +591,42 @@ function renderForecast(card, limit, forecast) {
 
   node.textContent = `${formatShare(forecast.atReset)} at reset`;
   node.setAttribute('data-usage', limitLevel(forecast.atReset));
+}
+
+/**
+ * The forecast as a tick on the bar: where the fill will reach by the reset.
+ *
+ * Pinned at the end when the window runs out first — the bar has no room past 100%,
+ * and the cell beside it names the moment instead.
+ */
+function renderForecastMark(card, limit, forecast) {
+  const mark = field(card, 'forecast');
+  if (!mark) return;
+  mark.hidden = forecast === undefined;
+  if (forecast === undefined) return;
+
+  const runsOut = forecast.hitAt !== undefined;
+  const share = runsOut ? 1 : Math.min(1, forecast.atReset);
+  mark.style.left = `${share * 100}%`;
+  mark.setAttribute('data-usage', runsOut ? 'bad' : limitLevel(forecast.atReset));
+  // Near an end, the label opens inwards rather than spilling off the card.
+  if (share < 0.3) mark.setAttribute('data-align', 'start');
+  else if (share > 0.7) mark.setAttribute('data-align', 'end');
+  else mark.removeAttribute('data-align');
+
+  const headline = runsOut
+    ? `${limit.reported ? 'Hits the limit' : 'Passes your heaviest'} ${formatForecastAt(limit, forecast.hitAt)}`
+    : `${formatShare(forecast.atReset)} by the reset`;
+  const pace = limit.windowMs > DAY_MS ? 'the last day' : 'the last hour';
+  const detail = `Where this ${limit.windowMs > DAY_MS ? 'week' : 'window'} lands if you keep working at the pace of ${pace}.`;
+
+  const label = field(card, 'forecast-label');
+  if (label) {
+    const strong = document.createElement('strong');
+    strong.textContent = headline;
+    label.replaceChildren(strong, document.createTextNode(detail));
+  }
+  mark.setAttribute('aria-label', `${headline}. ${detail}`);
 }
 
 /** A moment inside the window, at the coarseness its length deserves. */

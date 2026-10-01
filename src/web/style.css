@@ -552,11 +552,11 @@ body.drawer-open { overflow: hidden; }
 .limits-bar-row { display: flex; align-items: center; gap: .6rem; margin: .2rem 0 1rem; }
 
 .limits-bar {
+  position: relative;
   flex: 1;
   min-width: 0;
   height: .5rem;
   border-radius: 999px;
-  overflow: hidden;
   background: var(--rule);
 }
 
@@ -578,8 +578,84 @@ body.drawer-open { overflow: hidden; }
   display: block;
   height: 100%;
   background: var(--accent);
+  /* Rounded on its own rather than clipped by the bar, which has to let the
+     forecast tick stand proud of it. */
+  border-radius: inherit;
   /* Poll to poll the width moves by a hair; easing it stops that reading as a flicker. */
   transition: width .4s ease;
+}
+
+/* Where the window stands at its reset at the current pace. Taller than the bar so it
+   reads as a mark on it rather than a seam in the fill, and coloured on the bar's
+   scale through `[data-usage]`, which sets `color`. */
+.limits-bar-forecast {
+  position: absolute;
+  top: -.25rem;
+  bottom: -.25rem;
+  width: 2px;
+  border-radius: 1px;
+  transform: translateX(-50%);
+  background: currentColor;
+  color: var(--ink-soft);
+  outline: none;
+  transition: left .4s ease, width .18s ease, top .18s ease, bottom .18s ease;
+}
+
+/* Two pixels is too narrow to find with a pointer, so the tick carries a wider,
+   invisible hit area around it. */
+.limits-bar-forecast::before {
+  content: "";
+  position: absolute;
+  inset: -.3rem -.45rem;
+}
+
+/* On hover the tick stands taller and thicker, and says what it is. */
+.limits-bar-forecast:hover,
+.limits-bar-forecast:focus-visible {
+  width: 3px;
+  top: -.45rem;
+  bottom: -.45rem;
+}
+
+.limits-bar-forecast-label {
+  position: absolute;
+  bottom: calc(100% + .45rem);
+  left: 50%;
+  z-index: 2;
+  width: max-content;
+  max-width: min(17rem, 60vw);
+  padding: .45rem .6rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--ink) 14%, transparent);
+  color: var(--ink-soft);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: .72rem;
+  line-height: 1.4;
+  text-align: left;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, .3rem);
+  transition: opacity .18s ease, transform .18s ease;
+}
+/* Near either end of the bar the label opens inwards, so it never leaves the card. */
+.limits-bar-forecast[data-align="start"] .limits-bar-forecast-label { left: -.4rem; transform: translate(0, .3rem); }
+.limits-bar-forecast[data-align="end"] .limits-bar-forecast-label { left: auto; right: -.4rem; transform: translate(0, .3rem); }
+
+.limits-bar-forecast:hover .limits-bar-forecast-label,
+.limits-bar-forecast:focus-visible .limits-bar-forecast-label {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.limits-bar-forecast[data-align]:hover .limits-bar-forecast-label,
+.limits-bar-forecast[data-align]:focus-visible .limits-bar-forecast-label { transform: translate(0, 0); }
+
+.limits-bar-forecast-label strong { display: block; color: var(--ink); font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .limits-bar-forecast,
+  .limits-bar-forecast-label { transition: none; }
 }
 .limits-bar-fill[data-usage="ok"] { background: var(--ok); }
 .limits-bar-fill[data-usage="warn"] { background: var(--warn); }
