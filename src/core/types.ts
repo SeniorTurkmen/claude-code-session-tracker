@@ -236,6 +236,11 @@ export interface ReportedLimitReading {
    * aged past a fifth of the window it describes.
    */
   fetchedAt: number;
+  /**
+   * Who asked the server: `server` when this tool fetched it live, `claude-code`
+   * when it was read from the readout Claude Code cached in its account file.
+   */
+  source: 'claude-code' | 'server';
   /** The reset Claude Code named for this window, when it named one. */
   resetsAt?: number;
 }

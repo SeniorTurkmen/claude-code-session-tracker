@@ -13,6 +13,12 @@ export interface TrackerConfig {
   claudeJsonPath: string;
   host: string;
   port: number;
+  /**
+   * Never ask the server for the usage readout. The limit cards then rely on the
+   * readout Claude Code caches, or on the yardstick, and the tool makes no network
+   * calls at all.
+   */
+  offline: boolean;
 }
 
 export const DEFAULT_PORT = 3099;
@@ -33,7 +39,7 @@ export function resolveClaudeDir(
 }
 
 export function createConfig(
-  overrides: Partial<Pick<TrackerConfig, 'claudeDir' | 'claudeJsonPath' | 'host' | 'port'>> = {},
+  overrides: Partial<Pick<TrackerConfig, 'claudeDir' | 'claudeJsonPath' | 'host' | 'port' | 'offline'>> = {},
 ): TrackerConfig {
   const claudeDir = overrides.claudeDir ? resolve(overrides.claudeDir) : resolveClaudeDir();
   return {
@@ -43,6 +49,7 @@ export function createConfig(
     claudeJsonPath: overrides.claudeJsonPath ?? defaultClaudeJsonPath(claudeDir),
     host: overrides.host ?? DEFAULT_HOST,
     port: overrides.port ?? DEFAULT_PORT,
+    offline: overrides.offline ?? false,
   };
 }
 

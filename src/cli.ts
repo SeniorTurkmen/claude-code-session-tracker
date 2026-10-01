@@ -26,9 +26,12 @@ const HELP = `
         --json            Print the session list as JSON and exit
     -n, --limit <number>  How many sessions to list (default 50, running ones are always shown)
         --claude-dir <p>  Override the Claude data directory (default $CLAUDE_CONFIG_DIR or ~/.claude)
+        --offline         Never ask Anthropic's server for the usage limits
     -h, --help            Show this message
     -v, --version         Show the version
 
+  The only network call is Claude Code's own usage endpoint at api.anthropic.com,
+  asked with the token Claude Code is signed in with; --offline turns it off.
   Never writes to the Claude directory. Binds to loopback unless --host says
   otherwise, and refuses requests not addressed to a loopback host.
 `;
@@ -46,6 +49,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         json: { type: 'boolean', default: false },
         limit: { type: 'string', short: 'n' },
         'claude-dir': { type: 'string' },
+        offline: { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
         version: { type: 'boolean', short: 'v', default: false },
       },
@@ -89,6 +93,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     port,
     host: values.host ?? DEFAULT_HOST,
     claudeDir: values['claude-dir'],
+    offline: values.offline,
   });
 
   const registry = new SessionRegistry(config);

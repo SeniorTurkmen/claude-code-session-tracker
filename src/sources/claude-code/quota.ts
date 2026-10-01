@@ -24,10 +24,19 @@ export interface ReportedLimit {
   resetsAt?: number;
 }
 
-/** Both limits as the account file last cached them, and when that was. */
+/**
+ * Who asked the server for a readout.
+ *
+ * `claude-code` — Claude Code did, and cached the answer in the account file.
+ * `server` — this tool did, with the token Claude Code is signed in with.
+ */
+export type ReportedSource = 'claude-code' | 'server';
+
+/** Both limits as the server last reported them, and when that was. */
 export interface ReportedUsage {
-  /** When Claude Code last asked the server. The percentages are only as new as this. */
+  /** When the server was last asked. The percentages are only as new as this. */
   fetchedAt: number;
+  source: ReportedSource;
   /** The five-hour bar Claude Code calls a session limit. */
   session?: ReportedLimit;
   /** The seven-day bar that covers every model. */
@@ -71,8 +80,23 @@ export async function readReportedUsage(path: string): Promise<ReportedUsage | u
   if (!utilization) return undefined;
 
   const fetchedAt = cached?.['fetchedAtMs'];
+  return parseUtilization(utilization, typeof fetchedAt === 'number' ? fetchedAt : 0, 'claude-code');
+}
+
+/**
+ * Both limits out of one utilization readout.
+ *
+ * The account file caches exactly what the server's usage endpoint returns, so the
+ * same parser reads either — and `seven_day` is the all-models bar in both.
+ */
+export function parseUtilization(
+  utilization: Record<string, unknown>,
+  fetchedAt: number,
+  source: ReportedSource,
+): ReportedUsage {
   return {
-    fetchedAt: typeof fetchedAt === 'number' ? fetchedAt : 0,
+    fetchedAt,
+    source,
     ...spread('session', reading(utilization['five_hour'])),
     ...spread('weekly', reading(utilization['seven_day'])),
   };
@@ -98,7 +122,7 @@ function spread<K extends string, V>(key: K, value: V | undefined): Partial<Reco
   return value === undefined ? {} : ({ [key]: value } as Record<K, V>);
 }
 
-function obj(value: unknown): Record<string, unknown> | undefined {
+export function obj(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;

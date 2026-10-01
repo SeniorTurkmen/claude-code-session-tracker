@@ -60,8 +60,10 @@ else — and puts it on one page.
   agent listing, the MCP instructions — so the standing cost of every turn is
   itemised rather than a single number you cannot act on.
 - **`--json`** for scripting, and an HTTP API if you would rather build your own.
-- **No dependencies, no install scripts, no network calls, no writes** to your
-  Claude directory.
+- **No dependencies, no install scripts, no writes** to your Claude directory. The
+  one network call is Claude Code's own usage endpoint at `api.anthropic.com`, asked
+  every five minutes with the token Claude Code is signed in with, so the limit
+  cards show the same percentages as `/usage`. `--offline` turns it off.
 
 Click a row and the panel opens beside it:
 
@@ -115,6 +117,7 @@ Elsewhere, `npm i -g claude-code-session-tracker` (or the `pnpm add -g` /
 | `--json` | Print the session list as JSON and exit |
 | `-n, --limit <number>` | How many sessions to list (default `50`; running ones are always shown) |
 | `--claude-dir <path>` | Override the Claude data directory |
+| `--offline` | Never ask Anthropic's server for the usage limits; the cards fall back to Claude Code's cached readout or an estimate |
 | `-h, --help` | Show usage |
 | `-v, --version` | Show the version |
 

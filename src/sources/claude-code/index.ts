@@ -14,6 +14,7 @@ import { readUsageHistory } from './history.ts';
 import type { FileUsage } from './buckets.ts';
 import { readUsageLimits } from './limits.ts';
 import { readUsageProfile } from './profile.ts';
+import { ServerUsage } from './server-usage.ts';
 import { listLiveSessions } from './live.ts';
 import { listRecentSessions } from './transcripts.ts';
 
@@ -57,8 +58,15 @@ export class ClaudeCodeSource implements SessionSource {
    */
   readonly #projectPaths = new Map<string, string>();
 
+  /**
+   * The usage readout asked of the server, held between polls. Absent when the
+   * tool was started `--offline`, and then only the account file is read.
+   */
+  readonly #serverUsage: ServerUsage | undefined;
+
   constructor(config: TrackerConfig) {
     this.#config = config;
+    this.#serverUsage = config.offline ? undefined : new ServerUsage(config);
   }
 
   async isAvailable(): Promise<boolean> {
@@ -83,7 +91,8 @@ export class ClaudeCodeSource implements SessionSource {
   }
 
   async limits(): Promise<UsageLimits> {
-    return readUsageLimits(this.#config, this.#buckets);
+    const live = await this.#serverUsage?.read();
+    return readUsageLimits(this.#config, this.#buckets, Date.now(), live);
   }
 
   async usage(query: UsageQuery): Promise<UsageHistory> {

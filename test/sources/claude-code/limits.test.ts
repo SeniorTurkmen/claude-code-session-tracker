@@ -550,8 +550,42 @@ describe('readUsageLimits, Claude Code\u2019s own reading', () => {
 
     const limits = await readUsageLimits(home.config, cache(), NOW);
 
-    deepStrictEqual(limits.session.reported, { percent: 88, fetchedAt: at('11:55'), resetsAt: at('17:00') });
+    deepStrictEqual(limits.session.reported, {
+      percent: 88,
+      fetchedAt: at('11:55'),
+      source: 'claude-code',
+      resetsAt: at('17:00'),
+    });
     strictEqual(limits.weekly.reported?.percent, 35);
+  });
+
+  it('prefers a live server readout over an older cached one', async (t) => {
+    const home = await claudeHome(t);
+    await home.accountFile({
+      weeklyResetsAt: NOW + 3 * DAY_MS,
+      weeklyPercent: 80,
+      fiveHour: { percent: 60, resetsAt: at('17:00') },
+      fetchedAt: at('11:00'),
+    });
+    await home.transcript(CWD, sessionId(1), [turn(1, '12:00', 10)]);
+
+    const live = {
+      fetchedAt: at('11:58'),
+      source: 'server' as const,
+      session: { percent: 4, resetsAt: at('17:00') },
+      weekly: { percent: 33, resetsAt: NOW + 3 * DAY_MS },
+    };
+    const limits = await readUsageLimits(home.config, cache(), NOW, live);
+
+    strictEqual(limits.session.reported?.percent, 4);
+    strictEqual(limits.session.reported?.source, 'server');
+    strictEqual(limits.weekly.reported?.percent, 33);
+
+    // And the other way round: a cached readout newer than the live one wins.
+    const stale = { ...live, fetchedAt: at('10:00') };
+    const cachedWins = await readUsageLimits(home.config, cache(), NOW, stale);
+    strictEqual(cachedWins.session.reported?.percent, 60);
+    strictEqual(cachedWins.session.reported?.source, 'claude-code');
   });
 
   it('counts the five-hour window back from the reset Claude Code reported', async (t) => {

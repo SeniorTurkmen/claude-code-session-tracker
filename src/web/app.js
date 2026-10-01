@@ -809,7 +809,8 @@ function limitNote(limit, share) {
   // the account file left undated, is dropped before it reaches the page.
   const reported = limit.reported;
   if (reported) {
-    return `${scope}Claude Code's own reading of this ${span}, ${formatAgo(reported.fetchedAt)}.`;
+    const who = reported.source === 'server' ? "Anthropic's reading" : "Claude Code's own reading";
+    return `${scope}${who} of this ${span}, ${formatAgo(reported.fetchedAt)}.`;
   }
 
   // Only worth saying when it is true: an anchored week names its own reset above.

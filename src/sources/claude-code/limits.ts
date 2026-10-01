@@ -14,7 +14,7 @@ import {
   type FileUsage,
   type UsageBucket,
 } from './buckets.ts';
-import { readReportedUsage, type ReportedLimit } from './quota.ts';
+import { readReportedUsage, type ReportedLimit, type ReportedUsage } from './quota.ts';
 
 /** The stretch Claude Code bills against, and calls a session limit. */
 const WINDOW_MS = 5 * 60 * 60 * 1000;
@@ -76,11 +76,15 @@ const MAX_READING_AGE = 0.2;
  * cached readout can, and does — so it is read alongside and carried through as
  * `reported`, which is what keeps this tool and Claude Code quoting the same
  * percentage for the same window.
+ *
+ * `live` is the same readout asked of the server directly, for the machines whose
+ * account file carries none. Whichever of the two is newer is the one used.
  */
 export async function readUsageLimits(
   config: TrackerConfig,
   cache: FileCache<FileUsage>,
   now: number = Date.now(),
+  live?: ReportedUsage,
 ): Promise<UsageLimits> {
   // The wider of the two histories: the weekly yardstick needs four weeks, the
   // five-hour one a single week, and the files are only worth walking once.
@@ -88,13 +92,20 @@ export async function readUsageLimits(
   const buckets = mergeBuckets(await readUsageBuckets(config, cache, { since }));
   // Where both clocks actually fall, and how full the server says they are. Read
   // alongside the transcripts because it answers what they cannot.
-  const reported = await readReportedUsage(config.claudeJsonPath);
+  const cached = await readReportedUsage(config.claudeJsonPath);
+  const reported = newer(cached, live);
 
   return {
-    session: measureFiveHour(buckets, now, reported?.session, reported?.fetchedAt),
-    weekly: measureWeekly(buckets, now, reported?.weekly, reported?.fetchedAt),
+    session: measureFiveHour(buckets, now, reported?.session, reported),
+    weekly: measureWeekly(buckets, now, reported?.weekly, reported),
     generatedAt: now,
   };
+}
+
+/** The fresher of two readouts of the same limits. */
+function newer(a: ReportedUsage | undefined, b: ReportedUsage | undefined): ReportedUsage | undefined {
+  if (!a || !b) return a ?? b;
+  return b.fetchedAt > a.fetchedAt ? b : a;
 }
 
 /**
@@ -114,19 +125,21 @@ export async function readUsageLimits(
  */
 function attachReported(
   reported: ReportedLimit | undefined,
-  fetchedAt: number | undefined,
+  usage: ReportedUsage | undefined,
   now: number,
   windowMs: number,
 ): { reported: ReportedLimitReading } | undefined {
-  if (!reported || (reported.resetsAt !== undefined && reported.resetsAt <= now)) return undefined;
+  if (!reported || !usage || (reported.resetsAt !== undefined && reported.resetsAt <= now)) return undefined;
 
-  const age = now - (fetchedAt ?? 0);
+  const fetchedAt = usage.fetchedAt;
+  const age = now - fetchedAt;
   if (age < 0 || age > windowMs * MAX_READING_AGE) return undefined;
 
   return {
     reported: {
       percent: reported.percent,
-      fetchedAt: fetchedAt ?? 0,
+      fetchedAt,
+      source: usage.source,
       ...(reported.resetsAt !== undefined ? { resetsAt: reported.resetsAt } : {}),
     },
   };
@@ -143,7 +156,7 @@ function measureFiveHour(
   buckets: readonly UsageBucket[],
   now: number,
   reported?: ReportedLimit,
-  fetchedAt?: number,
+  usage?: ReportedUsage,
 ): UsageLimit {
   const since = now - HISTORY_DAYS * DAY_MS;
   const recent = buckets.filter((bucket) => bucket.at >= since);
@@ -159,7 +172,7 @@ function measureFiveHour(
     windowMs: WINDOW_MS,
     clock: current && current !== chained ? 'reported' : 'chained',
     historyDays: HISTORY_DAYS,
-    ...attachReported(reported, fetchedAt, now, WINDOW_MS),
+    ...attachReported(reported, usage, now, WINDOW_MS),
     ...summarize(windows, chained, now, current),
   };
 }
@@ -208,7 +221,7 @@ function measureWeekly(
   buckets: readonly UsageBucket[],
   now: number,
   cached?: ReportedLimit,
-  fetchedAt?: number,
+  usage?: ReportedUsage,
 ): UsageLimit {
   const reported = cached?.resetsAt ?? refusedWeeklyReset(buckets);
   const anchor = reported ?? now;
@@ -222,7 +235,7 @@ function measureWeekly(
     windowMs: WEEK_MS,
     clock: reported === undefined ? 'rolling' : 'reported',
     historyDays: WEEK_HISTORY_DAYS,
-    ...attachReported(cached, fetchedAt, now, WEEK_MS),
+    ...attachReported(cached, usage, now, WEEK_MS),
     ...summarize(windows, current, now),
   };
 }
