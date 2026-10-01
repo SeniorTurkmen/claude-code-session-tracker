@@ -1363,14 +1363,38 @@ let detailTimer = null;
  */
 let detailRequest = 0;
 
+/** How long the panel takes to slide; matches `.drawer` in style.css. */
+const DRAWER_MS = 240;
+let drawerHideTimer = null;
+
+/**
+ * Slides the panel and fades the scrim in or out. `hidden` cannot be transitioned,
+ * so opening unhides first and lets a frame pass before the class starts the slide,
+ * and closing waits for the slide to finish before hiding again.
+ */
+function showDrawer(shown) {
+  clearTimeout(drawerHideTimer);
+  const parts = [drawer, scrim].filter(Boolean);
+  if (shown) {
+    for (const part of parts) part.hidden = false;
+    void drawer.offsetWidth;
+    for (const part of parts) part.classList.add('is-shown');
+    return;
+  }
+  for (const part of parts) part.classList.remove('is-shown');
+  const instant = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  drawerHideTimer = setTimeout(() => {
+    for (const part of parts) part.hidden = true;
+  }, instant ? 0 : DRAWER_MS);
+}
+
 function openPanel(id, source) {
   if (!drawer) return;
   returnFocusTo = source ?? null;
   state.openId = id;
   state.detail = null;
 
-  drawer.hidden = false;
-  if (scrim) scrim.hidden = false;
+  showDrawer(true);
   document.body.classList.add('drawer-open');
 
   // Show what the list already knows so the panel is never blank while it loads.
@@ -1390,9 +1414,8 @@ function openPanel(id, source) {
 }
 
 function closePanel() {
-  if (!drawer || drawer.hidden) return;
-  drawer.hidden = true;
-  if (scrim) scrim.hidden = true;
+  if (!drawer || !state.openId) return;
+  showDrawer(false);
   document.body.classList.remove('drawer-open');
   state.openId = null;
   state.detail = null;

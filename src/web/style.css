@@ -346,9 +346,15 @@ footer { font-size: .75rem; color: var(--ink-faint); border-top: 1px solid var(-
 .scrim {
   position: fixed;
   inset: 0;
-  background: color-mix(in srgb, var(--ink) 32%, transparent);
+  /* Black rather than `--ink`, which is light in the dark theme and would wash the
+     page out instead of dimming it. */
+  background: rgb(0 0 0 / .45);
   z-index: 1;
+  opacity: 0;
+  transition: opacity .24s ease;
 }
+
+.scrim.is-shown { opacity: 1; }
 
 .drawer {
   position: fixed;
@@ -361,7 +367,15 @@ footer { font-size: .75rem; color: var(--ink-faint); border-top: 1px solid var(-
   height: 100dvh;
   background: var(--surface);
   border-left: 1px solid var(--rule);
-  box-shadow: -1px 0 24px color-mix(in srgb, var(--ink) 18%, transparent);
+  box-shadow: -1px 0 24px rgb(0 0 0 / .18);
+  transform: translateX(100%);
+  transition: transform .24s cubic-bezier(.2, .7, .2, 1);
+}
+
+.drawer.is-shown { transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .scrim, .drawer { transition: none; }
 }
 
 /* The scrim already covers the page; stop the body scrolling behind it too. */
@@ -523,7 +537,7 @@ body.drawer-open { overflow: hidden; }
   border: 1px solid var(--rule);
   border-radius: 3px;
   background: var(--surface);
-  box-shadow: 0 4px 18px color-mix(in srgb, var(--ink) 14%, transparent);
+  box-shadow: 0 4px 18px rgb(0 0 0 / .14);
   color: var(--ink-soft);
   /* Prose, not a label: the monospace face and the tracking it inherits from the
      `dt` around it belong to the word Projected, not to a sentence. */
@@ -634,7 +648,7 @@ body.drawer-open { overflow: hidden; }
   border: 1px solid var(--rule);
   border-radius: 3px;
   background: var(--surface);
-  box-shadow: 0 4px 18px color-mix(in srgb, var(--ink) 14%, transparent);
+  box-shadow: 0 4px 18px rgb(0 0 0 / .14);
   color: var(--ink-soft);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: .72rem;
@@ -962,7 +976,7 @@ body.drawer-open { overflow: hidden; }
   border-top: 2px solid var(--accent);
   border-radius: 6px 6px 0 0;
   background: var(--surface);
-  box-shadow: 0 -2px 28px color-mix(in srgb, var(--ink) 20%, transparent);
+  box-shadow: 0 -2px 28px rgb(0 0 0 / .20);
   animation: sheet-rise .24s ease-out;
 }
 
