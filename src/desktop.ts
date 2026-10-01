@@ -52,6 +52,8 @@ function run({
     const child = spawn(command, args, {
       stdio: 'ignore',
       detached: true,
+      // `cmd /c start` would otherwise flash a console when started without one.
+      windowsHide: true,
       ...(verbatimOnWindows ? { windowsVerbatimArguments: true } : {}),
     });
     // Explorer exits non-zero even when it worked, and a missing opener raises

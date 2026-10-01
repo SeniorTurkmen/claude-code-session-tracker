@@ -2,6 +2,7 @@
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { autostart } from './autostart.ts';
 import { createConfig, DEFAULT_HOST, DEFAULT_PORT } from './config.ts';
 import { SessionRegistry } from './core/registry.ts';
 import { openBrowser } from './desktop.ts';
@@ -18,6 +19,12 @@ const HELP = `
 
   Usage
     $ npx claude-code-session-tracker [options]
+    $ claude-code-session-tracker autostart on|off|status
+
+  Commands
+    autostart on          Start at login and open the page (macOS and Windows)
+    autostart off         Stop starting at login
+    autostart status      Say whether it starts at login
 
   Options
     -p, --port <number>   Port to listen on, stepping forward if taken (default ${DEFAULT_PORT})
@@ -37,6 +44,8 @@ const HELP = `
 `;
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
+  if (argv[0] === 'autostart') return autostart(argv.slice(1));
+
   let values;
   try {
     ({ values } = parseArgs({
