@@ -516,20 +516,20 @@ function renderLimitCard(card, limit, key) {
 
   const current = currentWindow(limit);
   const share = limitShare(limit, current);
-  // Read once and used twice: the cell for whoever is looking at the card, and the
-  // alarm for whoever is not. Two readings of the same clock taken a line apart
-  // would be two chances for them to disagree.
-  const pace = limitPace(limit, current);
+  // Read once and used three times: the cell and the note for whoever is looking at
+  // the card, and the alarm for whoever is not. Readings of the same clock taken a
+  // line apart would be chances for them to disagree.
+  const forecast = limitForecast(limit, current, share);
 
   setField(card, 'window', current ? windowRange(limit, current) : '');
   setField(card, 'reset', resetLine(limit, current));
 
   renderBar(card, share);
   setField(card, 'used', formatCompactCount(billedTokens(current?.tokens)));
-  renderPace(card, limit, current, pace);
-  reportProjection(key, limit, current, pace);
+  renderForecast(card, limit, forecast);
+  reportProjection(key, limit, current, forecast);
 
-  setField(card, 'note', limitNote(limit, share));
+  setField(card, 'note', limitNote(limit, share, current, forecast));
 }
 
 /**
@@ -565,79 +565,90 @@ function renderBar(card, share) {
 /**
  * Where the window in progress is headed, in the cell beside what it has spent.
  *
- * The whole cell leaves rather than reading `—`: a window too young to have a pace
- * has nothing to say about one, and an em dash beside a number invites the reader to
- * wonder what went missing. Tinted on the bar's scale, so the two agree about when
- * a window is getting expensive.
+ * One of two readings. A window on course to run out before it resets names the
+ * moment it does — that is the one thing on the card that can change what the
+ * reader does next. Otherwise it says where the window will stand when it resets.
+ *
+ * The whole cell leaves rather than reading `—`: a window without a recent rate has
+ * nothing to say about one, and an em dash beside a number invites the reader to
+ * wonder what went missing.
  */
-function renderPace(card, limit, current, pace) {
+function renderForecast(card, limit, forecast) {
   const row = field(card, 'pace-row');
-  if (row) row.hidden = pace === undefined;
-  if (pace === undefined) return;
+  if (row) row.hidden = forecast === undefined;
+  if (forecast === undefined) return;
 
   const node = field(card, 'pace');
   if (!node) return;
-  node.textContent = formatCompactCount(Math.round(pace));
 
-  const ceiling = limitCeiling(limit, current);
-  // Nothing to measure against means no scale to tint on — the same silence the bar
-  // keeps when it has no denominator.
-  if (ceiling) node.setAttribute('data-usage', limitLevel(pace / ceiling));
-  else node.removeAttribute('data-usage');
+  if (forecast.hitAt !== undefined) {
+    const label = limit.reported ? 'Limit' : 'Past heaviest';
+    node.textContent = `${label} ${formatForecastAt(limit, forecast.hitAt)}`;
+    node.setAttribute('data-usage', 'bad');
+    return;
+  }
+
+  node.textContent = `${formatShare(forecast.atReset)} at reset`;
+  node.setAttribute('data-usage', limitLevel(forecast.atReset));
+}
+
+/** A moment inside the window, at the coarseness its length deserves. */
+function formatForecastAt(limit, at) {
+  return limit.windowMs > DAY_MS ? formatDayClock(at) : formatClock(at);
 }
 
 /**
- * How much of a window has to be behind it before its pace means anything.
+ * How much of a window the recent stretch has to cover before its rate means anything.
  *
  * The arithmetic is sound from the first turn; the sample it draws on is not. Two
- * minutes into five hours a single heavy turn projects sixty times itself, so the
- * cell stays away until the window has said enough about its own rate to be worth
- * repeating — an hour of the five, a day and a half of the seven.
+ * minutes into a window, one heavy turn projects sixty times itself, so the forecast
+ * waits until the stretch is long enough to be worth repeating — a quarter of an hour
+ * of the five, eight hours of the seven days.
  */
-const PACE_MIN_ELAPSED = 0.2;
+const FORECAST_MIN_SPAN = 0.05;
 
 /**
- * What this window comes to by its reset if it carries on at the rate it has kept.
+ * Where this window ends up if work carries on at the rate of its recent stretch.
  *
- * The bar behind it looks backwards — how much of the window has gone. This is the
- * other half: whether what is left of the clock will survive the rate it is being
- * spent at, which is the one thing on the card that can change what the reader does
- * next.
+ * The rate is the recent stretch's, not the window's average: the question is what
+ * happens if you keep working the way you are working now — agents fanning out, a
+ * long refactor — and a window's average is mostly what happened before you started.
  *
- * Nothing is returned for a rolling week. That one ends at the instant it was
- * measured, so there is no remainder to project into and the projection would only
- * be the total again, wearing a word that promises a forecast.
+ * It is measured in tokens and read as a share by the same scale the bar uses: with
+ * a reported percentage, the tokens this window spent to reach it; without one, the
+ * heaviest window on record. So the forecast and the bar can never disagree about
+ * how far along the window already is.
+ *
+ * `hitAt` is set only when the window gets to the top before it resets — the moment
+ * worth telling someone about. `atReset` is where it stands at the reset either way,
+ * and can run past 1.
+ *
+ * Nothing is returned for a rolling week, which has no reset to forecast up to.
  */
-function limitPace(limit, current, now = Date.now()) {
-  if (!current || limit.clock === 'rolling') return undefined;
+function limitForecast(limit, current, share, now = Date.now()) {
+  if (!current || limit.clock === 'rolling' || !limit.recent || share === undefined) return undefined;
 
-  const used = billedTokens(current.tokens);
-  const total = current.resetsAt - current.startedAt;
-  const elapsed = now - current.startedAt;
-  if (!used || total <= 0 || elapsed <= 0) return undefined;
-  if (elapsed / total < PACE_MIN_ELAPSED) return undefined;
+  const ceiling = limitCeiling(limit, current);
+  const span = now - limit.recent.startedAt;
+  const remaining = current.resetsAt - now;
+  if (!ceiling || remaining <= 0 || span < limit.windowMs * FORECAST_MIN_SPAN) return undefined;
 
-  return used * (total / elapsed);
+  // Share of the window per millisecond, at the recent stretch's pace.
+  const rate = billedTokens(limit.recent.tokens) / span / ceiling;
+  const atReset = share + rate * remaining;
+
+  let hitAt;
+  if (share >= 1) hitAt = now;
+  else if (rate > 0 && now + (1 - share) / rate < current.resetsAt) hitAt = now + (1 - share) / rate;
+
+  return { atReset, hitAt, spanMs: span };
 }
-
-/**
- * Where the projection stops being a reading and starts being news.
- *
- * The bar's own top, whichever bar the card is drawing. With Claude Code's reading
- * in hand that is the real ceiling, and a window on course to reach it is a window
- * that will actually be refused. Without one it is the heaviest window this account
- * has already put through — the only line the card can honestly draw when the quota
- * itself is enforced server-side and never written down. Either way it is the moment
- * the page has something to say that the reader did not already know when they last
- * looked at it.
- */
-const PROJECTION_ALERT = 1;
 
 /** How a limit names itself when it arrives outside the page. */
 const LIMIT_LABELS = { session: 'Session limit', weekly: 'Weekly limit' };
 
 /**
- * Tell the reader that this window is headed past the yardstick.
+ * Tell the reader that this window will run out before it resets.
  *
  * The card says the same thing in colour, and says it to whoever is looking at the
  * card. This is the same fact addressed to whoever is not — which is the usual case,
@@ -649,25 +660,29 @@ const LIMIT_LABELS = { session: 'Session limit', weekly: 'Weekly limit' };
  * worth interrupting someone for — an interval the reader chooses, per limit — lives
  * in `notify.js` along with everything else about whether they wanted to hear it.
  */
-function reportProjection(key, limit, current, pace) {
-  const ceiling = limitCeiling(limit, current);
-  if (!current || pace === undefined || !ceiling || pace / ceiling < PROJECTION_ALERT) return;
-
-  const week = limit.windowMs > DAY_MS;
-  const span = week ? 'week' : 'five-hour window';
-  // The one figure worth carrying out here. The projection and the yardstick behind it
-  // stay on the card, where there is room for them and a reader who came to read them;
-  // the reset is what turns "you are going too fast" into something to do about it —
-  // wait it out, or spend what is left deliberately. A week away has to name its day.
-  // Five hours never leaves today or tomorrow, so the clock alone places it.
-  const when = week
-    ? `on ${formatDayClock(current.resetsAt)}`
-    : `at ${formatClock(current.resetsAt)}`;
+function reportProjection(key, limit, current, forecast) {
+  if (!current || forecast?.hitAt === undefined) return;
 
   sendAlert(key, {
     title: LIMIT_LABELS[key] ?? 'Limit',
-    body: `At this pace, it won't last the ${span} — it resets ${when}.`,
+    body: forecastSentence(limit, current, forecast),
   });
+}
+
+/**
+ * The forecast as one sentence: when the window runs out, and how long before its
+ * reset that is — the gap is what turns "you are going too fast" into something to
+ * do about it: slow down, or spend what is left deliberately.
+ */
+function forecastSentence(limit, current, forecast) {
+  const at = formatForecastAt(limit, forecast.hitAt);
+  const early = formatClockSpan(current.resetsAt - forecast.hitAt);
+  const pace = limit.windowMs > DAY_MS ? "today's pace" : "the last hour's pace";
+
+  if (forecast.hitAt <= Date.now()) return `Over the limit — it resets in ${early}.`;
+  return limit.reported
+    ? `At ${pace} you'll hit the limit at ${at}, ${early} before it resets.`
+    : `At ${pace} you'll pass your heaviest ${limit.windowMs > DAY_MS ? 'week' : 'five-hour window'} at ${at}, ${early} before it resets.`;
 }
 
 /** A part of one card, by role. The two cards are identical, so ids would collide. */
@@ -756,9 +771,13 @@ function limitShare(limit, current) {
  * Without one, the yardstick is all there is — the heaviest window on record.
  */
 function limitCeiling(limit, current) {
-  const percent = limit.reported?.percent;
   const used = billedTokens(current?.tokens);
-  if (percent > 0 && used > 0) return used / (percent / 100);
+  if (limit.reported) {
+    // A reading of 0% has spent nothing measurable to calibrate against, and the
+    // heaviest window is not the scale the bar is drawn on, so there is no ceiling.
+    const percent = limit.reported.percent;
+    return percent > 0 && used > 0 ? used / (percent / 100) : undefined;
+  }
   return billedTokens(limit.reference?.tokens) || undefined;
 }
 
@@ -799,7 +818,15 @@ function limitLevel(share) {
  * quota it is not. Everything past that sentence is detail the card is better off
  * without.
  */
-function limitNote(limit, share) {
+function limitNote(limit, share, current, forecast) {
+  // A window on course to run out says so first; how the bar was measured is
+  // detail behind that.
+  const warning = current && forecast?.hitAt !== undefined ? `${forecastSentence(limit, current, forecast)} ` : '';
+  return warning + limitSource(limit, share);
+}
+
+/** What the bar is a share of, and how old that reading is. */
+function limitSource(limit, share) {
   const week = limit.windowMs > DAY_MS;
   const span = week ? 'week' : 'five-hour window';
   // The weekly bar Claude bills every model against, not one model's own week.

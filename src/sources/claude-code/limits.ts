@@ -1,6 +1,7 @@
 import type { TrackerConfig } from '../../config.ts';
 import type { FileCache } from '../../core/cache.ts';
 import type {
+  RecentUsage,
   ReportedLimitReading,
   SessionTokenTotals,
   UsageLimit,
@@ -8,6 +9,7 @@ import type {
   UsageWindow,
 } from '../../core/types.ts';
 import {
+  BUCKET_MS,
   billedTokens,
   mergeBuckets,
   readUsageBuckets,
@@ -35,6 +37,15 @@ const HISTORY_DAYS = 7;
 const WEEK_HISTORY_DAYS = 28;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How far back the rate a forecast is drawn from looks.
+ *
+ * Long enough to smooth over a pause to read a diff, short enough that work started
+ * an hour ago is what the forecast is about: an hour of the five, a day of the seven.
+ */
+const SESSION_RECENT_MS = 60 * 60 * 1000;
+const WEEKLY_RECENT_MS = DAY_MS;
 
 /**
  * How much of a window a reading may be older than before it stops describing it.
@@ -174,6 +185,7 @@ function measureFiveHour(
     historyDays: HISTORY_DAYS,
     ...attachReported(reported, usage, now, WINDOW_MS),
     ...summarize(windows, chained, now, current),
+    ...recentUsage(recent, current, now, SESSION_RECENT_MS),
   };
 }
 
@@ -237,7 +249,39 @@ function measureWeekly(
     historyDays: WEEK_HISTORY_DAYS,
     ...attachReported(cached, usage, now, WEEK_MS),
     ...summarize(windows, current, now),
+    ...recentUsage(buckets, current, now, WEEKLY_RECENT_MS),
   };
+}
+
+/**
+ * What the window in progress billed over its last `lookbackMs`.
+ *
+ * Measured in whole half hours, because that is the grain the sweep keeps: the
+ * stretch opens on the bucket edge `lookbackMs` back, and never before the first
+ * whole bucket inside the window — a reported window can open mid-bucket, and
+ * counting the empty minutes before its first bucket would understate the rate.
+ */
+function recentUsage(
+  buckets: readonly UsageBucket[],
+  current: UsageWindow | undefined,
+  now: number,
+  lookbackMs: number,
+): { recent: RecentUsage } | undefined {
+  if (!current) return undefined;
+
+  const fromLookback = Math.floor((now - lookbackMs) / BUCKET_MS) * BUCKET_MS;
+  const fromWindow = Math.ceil(current.startedAt / BUCKET_MS) * BUCKET_MS;
+  const startedAt = Math.min(Math.max(fromLookback, fromWindow), now);
+
+  const tokens = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
+  for (const bucket of buckets) {
+    if (bucket.at < startedAt || bucket.at >= current.resetsAt || bucket.at > now) continue;
+    tokens.input += bucket.tokens.input;
+    tokens.output += bucket.tokens.output;
+    tokens.cacheRead += bucket.tokens.cacheRead;
+    tokens.cacheCreate += bucket.tokens.cacheCreate;
+  }
+  return { recent: { startedAt, tokens } };
 }
 
 /** The window in progress, the yardstick, and the last refusal — the three every limit reports. */

@@ -588,6 +588,32 @@ describe('readUsageLimits, Claude Code\u2019s own reading', () => {
     strictEqual(cachedWins.session.reported?.source, 'claude-code');
   });
 
+  it('reports the last hour of the window as the rate a forecast is drawn from', async (t) => {
+    // One chained window opening at 08:30, measured at 11:15. The last hour reaches
+    // back to the 10:00 bucket edge, so only the two later turns count.
+    const home = await claudeHome(t);
+    await home.transcript(CWD, sessionId(1), [
+      turn(1, '08:40', 100),
+      turn(2, '10:10', 20),
+      turn(3, '10:50', 5),
+    ]);
+
+    const limits = await readUsageLimits(home.config, cache(), at('11:15'));
+
+    strictEqual(limits.session.recent?.startedAt, at('10:00'));
+    strictEqual(limits.session.recent?.tokens.output, 25);
+  });
+
+  it('never starts the recent stretch before the window does', async (t) => {
+    const home = await claudeHome(t);
+    await home.transcript(CWD, sessionId(1), [turn(1, '11:40', 7)]);
+
+    const limits = await readUsageLimits(home.config, cache(), at('12:00'));
+
+    strictEqual(limits.session.recent?.startedAt, at('11:30'));
+    strictEqual(limits.session.recent?.tokens.output, 7);
+  });
+
   it('counts the five-hour window back from the reset Claude Code reported', async (t) => {
     // The chain would open this window on the 07:30 turn and close it at 12:30. The
     // server says the window it is billing ends at 17:00, so it began at 12:00 \u2014 and

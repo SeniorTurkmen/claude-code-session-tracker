@@ -245,6 +245,19 @@ export interface ReportedLimitReading {
   resetsAt?: number;
 }
 
+/**
+ * What the window in progress took in over its most recent stretch.
+ *
+ * The rate a forecast is drawn from. The window's own average answers a different
+ * question — how it has gone so far — and a burst of agents two hours into a quiet
+ * window barely moves it; the last stretch is what says how fast it is going now.
+ */
+export interface RecentUsage {
+  /** Where the stretch opens: a half-hour edge, never before the window's own start. */
+  startedAt: number;
+  tokens: SessionTokenTotals;
+}
+
 /** One rate limit: the window in progress, and what there is to read it against. */
 export interface UsageLimit {
   /** How long one window of this limit runs. */
@@ -280,6 +293,8 @@ export interface UsageLimit {
    * on either side of the seam that Claude itself put a stop to.
    */
   lastLimited?: UsageWindow;
+  /** The recent stretch of `current` — absent when no window is open. */
+  recent?: RecentUsage;
   /** How many days back `reference` looked. */
   historyDays: number;
 }
